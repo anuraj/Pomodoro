@@ -1,0 +1,31 @@
+schema: spec-driven
+githubCopilot:
+  cloudAgent: false
+
+context: |
+  Tech stack: Jekyll static site hosted on anuraj.dev with a lightweight Progressive Web App (PWA) frontend.
+  Frontend implementation: plain JavaScript, Bootstrap for UI, and minimal custom CSS.
+  Persistence: browser localStorage is the main data store; no backend or database is required.
+  Product goal: a simple Pomodoro timer with work sessions, short/long breaks, task tracking, settings, and a responsive mobile-friendly experience.
+  Hosting constraints: app must be compatible with static site hosting, should work as a PWA installable from the site, and must not depend on a server-side runtime.
+  Design preference: keep code simple, readable, and maintainable; prioritize speed and reliability over framework complexity.
+
+rules:
+  proposal:
+    - Keep proposals focused on a static-site PWA implementation.
+    - Include offline/PWA behavior, localStorage usage, and Jekyll compatibility considerations.
+    - Prefer simple JavaScript and Bootstrap patterns over framework-heavy solutions.
+  tasks:
+    - Break work into small, testable frontend tasks.
+    - Separate timer logic, UI updates, and persistence concerns.
+    - Favor simple browser APIs and minimal dependencies.
+
+operations:
+  apply:
+    guidance:
+      - Keep code compatible with Jekyll static hosting and browser-only execution.
+      - Favor localStorage for user settings and session state rather than backend services.
+      - Ensure the app remains installable and functional offline when supported by the browser.
+  archive:
+    guidance:
+      - Summarize what was implemented for the Pomodoro PWA and any assumptions around local persistence and static hosting.
