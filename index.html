@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta id="theme-color-meta" name="theme-color" content="#0b1220" />
+    <meta name="description" content="Pomodoro timer for focused work sessions and short breaks" />
+    <title>Pomodoro Timer</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="pomodoro-card" aria-label="Pomodoro timer panel">
+        <header class="timer-header">
+          <button id="theme-button" class="theme-button" type="button" aria-label="Theme: Dark. Activate to use Light theme" title="Theme: Dark. Activate to use Light theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path id="theme-icon" d="M12 3v2m0 14v2M5.64 5.64l1.42 1.42m9.9 9.9 1.42 1.42M3 12h2m14 0h2M5.64 18.36l1.42-1.42m9.9-9.9 1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />
+            </svg>
+          </button>
+          <div class="header-actions">
+            <button id="notification-button" class="notification-button" type="button" aria-pressed="false" aria-label="Enable browser notifications" title="Enable browser notifications">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="timer-workspace" aria-label="Pomodoro timer workspace">
+          <div class="timer-wrap">
+            <svg class="progress-ring" viewBox="0 0 220 220" aria-hidden="true">
+              <circle class="ring-bg" cx="110" cy="110" r="88"></circle>
+              <circle id="progress-circle" class="ring-progress" cx="110" cy="110" r="88"></circle>
+            </svg>
+
+            <div class="timer-digit-wrap" aria-live="polite" aria-atomic="true">
+              <div id="timer-display" class="timer-display">25:00</div>
+              <span id="timer-mode" class="mode-badge">Work</span>
+            </div>
+          </div>
+
+          <div class="controls" aria-label="Timer controls">
+            <button id="start-btn" class="control-btn control-primary" aria-label="Start timer" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+            <button id="pause-btn" class="control-btn pause-btn" aria-label="Pause timer" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5.25h3.5v13.5H7zm6.5 0H17v13.5h-3.5z" />
+              </svg>
+            </button>
+            <button id="reset-btn" class="control-btn" aria-label="Reset timer" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8.3" />
+                <path d="M3 3v5.3h5.3" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="focus-note-field">
+            <label for="focus-note">Focus note <span>(optional)</span></label>
+            <input id="focus-note" name="focus-note" type="text" maxlength="24" autocomplete="off" placeholder="What are you focusing on?" />
+          </div>
+        </section>
+
+        <div class="dashboard-workspace">
+          <section class="stats-panel" aria-label="Pomodoro statistics dashboard">
+            <div class="stats-header">
+              <h2>Statistics</h2>
+            </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-label">7-day focus</span>
+              <strong id="stats-week-total" class="stat-value">0</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Avg. session</span>
+              <strong id="stats-average-duration" class="stat-value">No data</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Current streak</span>
+              <strong id="stats-current-streak" class="stat-value">0 days</strong>
+            </div>
+          </div>
+
+          <div
+            id="stats-chart"
+            class="stats-chart"
+            role="img"
+            aria-label="Seven-day Pomodoro chart"
+            aria-describedby="stats-chart-summary"
+          ></div>
+          <p id="stats-chart-summary" class="sr-only" aria-live="polite">
+            Seven-day Pomodoro activity chart. No completed sessions yet.
+          </p>
+          </section>
+
+          <section class="history-panel" aria-label="Completed sessions history">
+            <div class="history-header">
+              <h2>History</h2>
+            </div>
+            <ul id="history-list" class="history-list" aria-live="polite"></ul>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>
