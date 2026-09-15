@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pomodoro-cache-v6';
+const CACHE_NAME = 'pomodoro-cache-v8';
 const APP_FILES = ['./', './index.html', './styles.css', './app.js', './sw.js', './manifest.webmanifest', './icon.svg'];
 
 function isAppClient(client) {
