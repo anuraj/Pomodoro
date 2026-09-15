@@ -17,18 +17,13 @@
     <main class="app-shell">
       <section class="pomodoro-card" aria-label="Pomodoro timer panel">
         <header class="timer-header">
-          <button id="theme-button" class="theme-button" type="button" aria-label="Theme: Dark. Activate to use Light theme" title="Theme: Dark. Activate to use Light theme">
+          <span class="app-title">Pomodoro</span>
+          <button id="settings-button" class="settings-button" type="button" aria-label="Open settings" title="Settings">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path id="theme-icon" d="M12 3v2m0 14v2M5.64 5.64l1.42 1.42m9.9 9.9 1.42 1.42M3 12h2m14 0h2M5.64 18.36l1.42-1.42m9.9-9.9 1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />
+              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 8.94 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.57 15 1.7 1.7 0 0 0 3 14H3v-4h.09A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.57 1.7 1.7 0 0 0 10 3h4v.09a1.7 1.7 0 0 0 1.06 1.51 1.7 1.7 0 0 0 1.88-.34L17 4.2 19.83 7l-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 21 10h.09v4H21a1.7 1.7 0 0 0-1.6 1Z" />
             </svg>
           </button>
-          <div class="header-actions">
-            <button id="notification-button" class="notification-button" type="button" aria-pressed="false" aria-label="Enable browser notifications" title="Enable browser notifications">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
-              </svg>
-            </button>
-          </div>
         </header>
 
         <section class="timer-workspace" aria-label="Pomodoro timer workspace">
@@ -109,6 +104,82 @@
         </div>
       </section>
     </main>
+
+    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+      <form id="settings-form" class="settings-form" method="dialog" novalidate>
+        <div class="settings-header">
+          <div>
+            <span class="settings-eyebrow">Preferences</span>
+            <h2 id="settings-title">Settings</h2>
+          </div>
+          <button id="settings-close" class="icon-button" type="button" aria-label="Close settings" title="Close settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p id="settings-error" class="settings-error" role="alert" aria-live="assertive"></p>
+
+        <fieldset class="settings-group">
+          <legend>Timer</legend>
+          <div class="settings-grid">
+            <label class="settings-field" for="focus-minutes">
+              <span>Focus time</span>
+              <span class="number-control">
+                <input id="focus-minutes" name="focusMinutes" type="number" min="1" max="120" step="1" inputmode="numeric" required />
+                <span aria-hidden="true">min</span>
+              </span>
+            </label>
+            <label class="settings-field" for="break-minutes">
+              <span>Break time</span>
+              <span class="number-control">
+                <input id="break-minutes" name="breakMinutes" type="number" min="1" max="120" step="1" inputmode="numeric" required />
+                <span aria-hidden="true">min</span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="settings-group">
+          <legend>Session colors</legend>
+          <div class="settings-grid">
+            <label class="settings-field color-field" for="work-color">
+              <span>Focus accent</span>
+              <input id="work-color" name="workColor" type="color" />
+            </label>
+            <label class="settings-field color-field" for="break-color">
+              <span>Break accent</span>
+              <input id="break-color" name="breakColor" type="color" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="settings-group">
+          <legend>Appearance</legend>
+          <div class="theme-options">
+            <label><input type="radio" name="theme" value="light" /> <span>Light</span></label>
+            <label><input type="radio" name="theme" value="dark" /> <span>Dark</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="settings-group">
+          <legend>Alerts</legend>
+          <label class="toggle-row" for="notifications-enabled">
+            <span>
+              <strong>Browser notifications</strong>
+              <small id="notification-status">Notifications off</small>
+            </span>
+            <input id="notifications-enabled" name="notificationsEnabled" type="checkbox" />
+          </label>
+        </fieldset>
+
+        <div class="settings-actions">
+          <button id="settings-cancel" class="settings-action settings-cancel" type="button">Cancel</button>
+          <button class="settings-action settings-save" type="submit">Save settings</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" defer></script>
     <script src="app.js" defer></script>

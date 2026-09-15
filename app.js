@@ -2,13 +2,21 @@ const STORAGE_KEYS = {
   state: 'pomodoro-state-v1',
   history: 'pomodoro-history-v1',
   theme: 'pomodoro-theme-v1',
-  notifications: 'pomodoro-notifications-v1'
+  notifications: 'pomodoro-notifications-v1',
+  settings: 'pomodoro-settings-v1'
 };
 
 const THEME_OPTIONS = ['light', 'dark'];
 
-const WORK_SECONDS = 25 * 60;
-const BREAK_SECONDS = 5 * 60;
+const DEFAULT_SETTINGS = Object.freeze({
+  focusMinutes: 25,
+  breakMinutes: 5,
+  workColor: '#f59e0b',
+  breakColor: '#14b8a6',
+  theme: 'dark',
+  notificationsEnabled: false
+});
+
 const RING_CIRCUMFERENCE = 2 * Math.PI * 88;
 
 const elements = {
@@ -25,52 +33,129 @@ const elements = {
   averageDuration: document.getElementById('stats-average-duration'),
   currentStreak: document.getElementById('stats-current-streak'),
   statsChart: document.getElementById('stats-chart'),
-  themeButton: document.getElementById('theme-button'),
-  themeIcon: document.getElementById('theme-icon'),
   themeColorMeta: document.getElementById('theme-color-meta'),
-  notificationButton: document.getElementById('notification-button')
+  settingsButton: document.getElementById('settings-button'),
+  settingsDialog: document.getElementById('settings-dialog'),
+  settingsForm: document.getElementById('settings-form'),
+  settingsClose: document.getElementById('settings-close'),
+  settingsCancel: document.getElementById('settings-cancel'),
+  settingsError: document.getElementById('settings-error'),
+  focusMinutes: document.getElementById('focus-minutes'),
+  breakMinutes: document.getElementById('break-minutes'),
+  workColor: document.getElementById('work-color'),
+  breakColor: document.getElementById('break-color'),
+  notificationToggle: document.getElementById('notifications-enabled'),
+  notificationStatus: document.getElementById('notification-status')
 };
 
 let audioContext = null;
 let timerId = null;
 let statsChart = null;
-let themePreference = loadThemePreference();
-let notificationsEnabled = loadNotificationPreference();
+let settings = loadSettings();
+let themePreference = settings.theme;
+let notificationsEnabled = settings.notificationsEnabled;
 
 const state = loadState();
 
-function loadThemePreference() {
+function isValidDuration(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 120;
+}
+
+function normalizeHexColor(value) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function normalizeSettings(candidate, fallback = DEFAULT_SETTINGS) {
+  const source = candidate && typeof candidate === 'object' ? candidate : {};
+
+  return {
+    focusMinutes: isValidDuration(source.focusMinutes) ? source.focusMinutes : fallback.focusMinutes,
+    breakMinutes: isValidDuration(source.breakMinutes) ? source.breakMinutes : fallback.breakMinutes,
+    workColor: normalizeHexColor(source.workColor) || fallback.workColor,
+    breakColor: normalizeHexColor(source.breakColor) || fallback.breakColor,
+    theme: THEME_OPTIONS.includes(source.theme) ? source.theme : fallback.theme,
+    notificationsEnabled: typeof source.notificationsEnabled === 'boolean'
+      ? source.notificationsEnabled
+      : fallback.notificationsEnabled
+  };
+}
+
+function loadSettings() {
   try {
-    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
-    return THEME_OPTIONS.includes(savedTheme) ? savedTheme : 'dark';
+    const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
+
+    if (savedSettings !== null) {
+      return normalizeSettings(JSON.parse(savedSettings));
+    }
+
+    return normalizeSettings({
+      theme: localStorage.getItem(STORAGE_KEYS.theme),
+      notificationsEnabled: localStorage.getItem(STORAGE_KEYS.notifications) === 'enabled'
+    });
   } catch (error) {
-    console.warn('Unable to read theme preference.', error);
-    return 'dark';
+    console.warn('Unable to read settings.', error);
+    return { ...DEFAULT_SETTINGS };
   }
 }
 
-function saveThemePreference() {
-  try {
-    localStorage.setItem(STORAGE_KEYS.theme, themePreference);
-  } catch (error) {
-    console.warn('Unable to persist theme preference.', error);
-  }
+function getColorChannels(hexColor) {
+  return {
+    red: parseInt(hexColor.slice(1, 3), 16),
+    green: parseInt(hexColor.slice(3, 5), 16),
+    blue: parseInt(hexColor.slice(5, 7), 16)
+  };
 }
 
-function loadNotificationPreference() {
+function getRelativeLuminance(hexColor) {
+  const channels = Object.values(getColorChannels(hexColor)).map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+
+  return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
+}
+
+function getReadableForeground(hexColor) {
+  const backgroundLuminance = getRelativeLuminance(hexColor);
+  const darkColor = '#0b1220';
+  const darkContrast = (backgroundLuminance + 0.05) / (getRelativeLuminance(darkColor) + 0.05);
+  const lightContrast = 1.05 / (backgroundLuminance + 0.05);
+
+  return darkContrast >= lightContrast ? darkColor : '#ffffff';
+}
+
+function toRgba(hexColor, alpha) {
+  const { red, green, blue } = getColorChannels(hexColor);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function applyAccentSettings() {
+  const rootStyle = document.documentElement.style;
+
+  rootStyle.setProperty('--accent', settings.workColor);
+  rootStyle.setProperty('--accent-soft', toRgba(settings.workColor, 0.18));
+  rootStyle.setProperty('--accent-shadow', toRgba(settings.workColor, 0.22));
+  rootStyle.setProperty('--accent-contrast', getReadableForeground(settings.workColor));
+  rootStyle.setProperty('--break-accent', settings.breakColor);
+  rootStyle.setProperty('--break-soft', toRgba(settings.breakColor, 0.18));
+  rootStyle.setProperty('--break-shadow', toRgba(settings.breakColor, 0.22));
+  rootStyle.setProperty('--break-contrast', getReadableForeground(settings.breakColor));
+}
+
+function saveSettings(nextSettings) {
+  settings = normalizeSettings(nextSettings);
+  themePreference = settings.theme;
+  notificationsEnabled = settings.notificationsEnabled;
+  applyAccentSettings();
+
   try {
-    return localStorage.getItem(STORAGE_KEYS.notifications) === 'enabled';
+    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+    return true;
   } catch (error) {
-    console.warn('Unable to read notification preference.', error);
+    console.warn('Unable to persist settings.', error);
     return false;
-  }
-}
-
-function saveNotificationPreference() {
-  try {
-    localStorage.setItem(STORAGE_KEYS.notifications, notificationsEnabled ? 'enabled' : 'disabled');
-  } catch (error) {
-    console.warn('Unable to persist notification preference.', error);
   }
 }
 
@@ -86,55 +171,41 @@ function renderNotificationControl() {
   const permission = getNotificationPermission();
   const isEnabled = notificationsEnabled && permission === 'granted';
   let status = 'Notifications off';
-  let label = 'Enable browser notifications';
   let disabled = false;
 
   if (permission === 'unsupported') {
     status = 'Notifications unavailable';
-    label = 'Browser notifications are unavailable';
     disabled = true;
   } else if (permission === 'denied') {
     status = 'Notifications blocked';
-    label = 'Browser notifications are blocked';
     disabled = true;
   } else if (isEnabled) {
     status = 'Notifications on';
-    label = 'Disable browser notifications';
-  } else if (permission === 'granted') {
-    label = 'Enable browser notifications';
-  } else {
-    label = 'Enable browser notifications';
   }
 
-  elements.notificationButton.disabled = disabled;
-  elements.notificationButton.setAttribute('aria-pressed', String(isEnabled));
-  elements.notificationButton.setAttribute('aria-label', label);
-  elements.notificationButton.title = label;
-  elements.notificationButton.dataset.status = status;
+  elements.notificationToggle.disabled = disabled;
+  elements.notificationToggle.checked = isEnabled;
+  elements.notificationStatus.textContent = status;
 }
 
-async function toggleNotifications() {
+async function resolveNotificationPreference(requested) {
   const permission = getNotificationPermission();
 
   if (permission === 'unsupported' || permission === 'denied') {
-    renderNotificationControl();
-    return;
+    return false;
   }
 
-  if (permission === 'granted') {
-    notificationsEnabled = !notificationsEnabled;
-  } else {
+  if (requested && permission !== 'granted') {
     try {
       const requestedPermission = await window.Notification.requestPermission();
-      notificationsEnabled = requestedPermission === 'granted';
+      return requestedPermission === 'granted';
     } catch (error) {
-      notificationsEnabled = false;
       console.warn('Unable to request browser notification permission.', error);
+      return false;
     }
   }
 
-  saveNotificationPreference();
-  renderNotificationControl();
+  return requested && permission === 'granted';
 }
 
 function getEffectiveTheme() {
@@ -145,38 +216,24 @@ function getThemeToken(name) {
   return getComputedStyle(elements.body).getPropertyValue(name).trim();
 }
 
-function getNextTheme() {
-  const currentIndex = THEME_OPTIONS.indexOf(themePreference);
-  return THEME_OPTIONS[(currentIndex + 1) % THEME_OPTIONS.length];
-}
-
-function formatThemeName(theme) {
-  return theme.charAt(0).toUpperCase() + theme.slice(1);
-}
-
 function applyTheme() {
   const effectiveTheme = getEffectiveTheme();
   const isLight = effectiveTheme === 'light';
-  const nextTheme = getNextTheme();
-  const themeLabel = `Theme: ${formatThemeName(themePreference)}. Activate to use ${formatThemeName(nextTheme)} theme`;
 
   document.documentElement.classList.toggle('theme-light', isLight);
   document.documentElement.classList.toggle('theme-dark', !isLight);
   elements.body.dataset.theme = effectiveTheme;
-  elements.themeButton.setAttribute('aria-label', themeLabel);
-  elements.themeButton.title = themeLabel;
-  elements.themeIcon.setAttribute('d', isLight
-    ? 'M12 3v2m0 14v2M5.64 5.64l1.42 1.42m9.9 9.9 1.42 1.42M3 12h2m14 0h2M5.64 18.36l1.42-1.42m9.9-9.9 1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'
-    : 'M20.35 15.35A8.5 8.5 0 0 1 8.65 3.65 8.5 8.5 0 1 0 20.35 15.35Z');
   elements.themeColorMeta.content = isLight ? '#f5f7fb' : '#0b1220';
 }
 
 function defaultState() {
+  const workSeconds = getModeDuration('work');
+
   return {
     mode: 'work',
     phase: 'idle',
-    remainingSeconds: WORK_SECONDS,
-    totalSeconds: WORK_SECONDS,
+    remainingSeconds: workSeconds,
+    totalSeconds: workSeconds,
     lastTimestamp: null
   };
 }
@@ -192,8 +249,8 @@ function loadState() {
     return {
       ...defaultState(),
       ...savedState,
-      remainingSeconds: Number(savedState.remainingSeconds) || WORK_SECONDS,
-      totalSeconds: Number(savedState.totalSeconds) || WORK_SECONDS,
+      remainingSeconds: Number(savedState.remainingSeconds) || getModeDuration('work'),
+      totalSeconds: Number(savedState.totalSeconds) || getModeDuration('work'),
       mode: savedState.mode === 'break' ? 'break' : 'work',
       phase: ['idle', 'running', 'paused'].includes(savedState.phase) ? savedState.phase : 'idle'
     };
@@ -230,7 +287,7 @@ function saveHistory(history) {
 }
 
 function getModeDuration(mode) {
-  return mode === 'work' ? WORK_SECONDS : BREAK_SECONDS;
+  return (mode === 'work' ? settings.focusMinutes : settings.breakMinutes) * 60;
 }
 
 function formatTime(seconds) {
@@ -451,6 +508,7 @@ function renderTimer() {
 }
 
 function updateTheme() {
+  applyAccentSettings();
   applyTheme();
 }
 
@@ -502,7 +560,7 @@ function render() {
 
   elements.startButton.disabled = state.phase === 'running';
   elements.pauseButton.disabled = state.phase !== 'running';
-  elements.resetButton.disabled = state.phase === 'idle' && state.mode === 'work' && state.remainingSeconds === WORK_SECONDS;
+  elements.resetButton.disabled = state.phase === 'idle' && state.mode === 'work' && state.remainingSeconds === getModeDuration('work');
 
   renderTimer();
   renderStatistics();
@@ -575,7 +633,7 @@ function completeSession() {
     id: Date.now(),
     date: new Date().toISOString(),
     type: sessionType,
-    durationSeconds: getModeDuration(sessionType)
+    durationSeconds: state.totalSeconds
   };
 
   if (focusNote) {
@@ -651,10 +709,76 @@ function resetTimer() {
   stopTimer();
   state.mode = 'work';
   state.phase = 'idle';
-  state.totalSeconds = WORK_SECONDS;
-  state.remainingSeconds = WORK_SECONDS;
+  state.totalSeconds = getModeDuration('work');
+  state.remainingSeconds = state.totalSeconds;
   state.lastTimestamp = null;
   render();
+}
+
+function populateSettingsForm() {
+  elements.focusMinutes.value = String(settings.focusMinutes);
+  elements.breakMinutes.value = String(settings.breakMinutes);
+  elements.workColor.value = settings.workColor;
+  elements.breakColor.value = settings.breakColor;
+  elements.settingsForm.elements.theme.value = settings.theme;
+  elements.settingsError.textContent = '';
+  renderNotificationControl();
+}
+
+function openSettings() {
+  populateSettingsForm();
+  elements.settingsDialog.showModal();
+  elements.focusMinutes.focus();
+}
+
+function closeSettings() {
+  if (elements.settingsDialog.open) {
+    elements.settingsDialog.close();
+  }
+}
+
+function validateDurationInput(input) {
+  const value = Number(input.value);
+  const isValid = isValidDuration(value) && input.value.trim() !== '';
+  input.setCustomValidity(isValid ? '' : 'Enter a whole number from 1 to 120.');
+  return isValid;
+}
+
+async function handleSettingsSubmit(event) {
+  event.preventDefault();
+
+  const focusIsValid = validateDurationInput(elements.focusMinutes);
+  const breakIsValid = validateDurationInput(elements.breakMinutes);
+
+  if (!focusIsValid || !breakIsValid || !elements.settingsForm.checkValidity()) {
+    elements.settingsError.textContent = 'Check the highlighted timer values and try again.';
+    elements.settingsForm.reportValidity();
+    return;
+  }
+
+  const notificationsRequested = elements.notificationToggle.checked;
+  const effectiveNotifications = await resolveNotificationPreference(notificationsRequested);
+  const nextSettings = {
+    focusMinutes: Number(elements.focusMinutes.value),
+    breakMinutes: Number(elements.breakMinutes.value),
+    workColor: elements.workColor.value,
+    breakColor: elements.breakColor.value,
+    theme: elements.settingsForm.elements.theme.value,
+    notificationsEnabled: elements.notificationToggle.disabled
+      ? settings.notificationsEnabled
+      : effectiveNotifications
+  };
+
+  saveSettings(nextSettings);
+
+  if (state.phase === 'idle') {
+    state.totalSeconds = getModeDuration(state.mode);
+    state.remainingSeconds = state.totalSeconds;
+  }
+
+  renderNotificationControl();
+  render();
+  closeSettings();
 }
 
 function initialize() {
@@ -676,14 +800,23 @@ function initialize() {
   render();
 }
 
-function handleThemeChange() {
-  themePreference = getNextTheme();
-  saveThemePreference();
-  render();
-}
-
-elements.themeButton.addEventListener('click', handleThemeChange);
-elements.notificationButton.addEventListener('click', toggleNotifications);
+elements.settingsButton.addEventListener('click', openSettings);
+elements.settingsClose.addEventListener('click', closeSettings);
+elements.settingsCancel.addEventListener('click', closeSettings);
+elements.settingsDialog.addEventListener('close', () => elements.settingsButton.focus());
+elements.settingsDialog.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  elements.settingsError.textContent = '';
+  closeSettings();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && elements.settingsDialog.open) {
+    event.preventDefault();
+    elements.settingsError.textContent = '';
+    closeSettings();
+  }
+});
+elements.settingsForm.addEventListener('submit', handleSettingsSubmit);
 elements.startButton.addEventListener('click', startTimer);
 elements.pauseButton.addEventListener('click', pauseTimer);
 elements.resetButton.addEventListener('click', resetTimer);
