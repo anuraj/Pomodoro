@@ -2,7 +2,7 @@
   "name": "Pomodoro Timer",
   "short_name": "Pomodoro",
   "description": "Focused work and break timer with history and local persistence.",
-  "start_url": "/",
+  "start_url": "/Pomodoro",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0b1220",

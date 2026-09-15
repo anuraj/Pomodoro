@@ -45,12 +45,17 @@ const elements = {
   workColor: document.getElementById('work-color'),
   breakColor: document.getElementById('break-color'),
   notificationToggle: document.getElementById('notifications-enabled'),
-  notificationStatus: document.getElementById('notification-status')
+  notificationStatus: document.getElementById('notification-status'),
+  notificationActionPrompt: null,
+  notificationActionText: null,
+  notificationActionStart: null,
+  notificationActionOpen: null
 };
 
 let audioContext = null;
 let timerId = null;
 let statsChart = null;
+let pendingNotificationAction = null;
 let settings = loadSettings();
 let themePreference = settings.theme;
 let notificationsEnabled = settings.notificationsEnabled;
@@ -234,7 +239,8 @@ function defaultState() {
     phase: 'idle',
     remainingSeconds: workSeconds,
     totalSeconds: workSeconds,
-    lastTimestamp: null
+    lastTimestamp: null,
+    readySessionToken: null
   };
 }
 
@@ -252,7 +258,10 @@ function loadState() {
       remainingSeconds: Number(savedState.remainingSeconds) || getModeDuration('work'),
       totalSeconds: Number(savedState.totalSeconds) || getModeDuration('work'),
       mode: savedState.mode === 'break' ? 'break' : 'work',
-      phase: ['idle', 'running', 'paused'].includes(savedState.phase) ? savedState.phase : 'idle'
+      phase: ['idle', 'running', 'paused'].includes(savedState.phase) ? savedState.phase : 'idle',
+      readySessionToken: typeof savedState.readySessionToken === 'string' && savedState.readySessionToken
+        ? savedState.readySessionToken
+        : null
     };
   } catch (error) {
     console.warn('Unable to read Pomodoro state from storage.', error);
@@ -604,20 +613,66 @@ function playCompletionTone() {
   }
 }
 
-function sendCompletionNotification(sessionType) {
+function buildCompletionNotification(sessionRecord, nextMode, readySessionToken) {
+  const isWorkSession = sessionRecord.type === 'work';
+  const completedLabel = isWorkSession ? 'Work' : 'Break';
+  const nextLabel = nextMode === 'break' ? 'Break' : 'Focus';
+  const bodyParts = [
+    `${completedLabel} completed: ${formatDisplayDuration(sessionRecord.durationSeconds)}.`
+  ];
+
+  if (isWorkSession && sessionRecord.note) {
+    bodyParts.push(`Focus: ${sessionRecord.note}.`);
+  }
+
+  bodyParts.push(`${nextLabel} session ready.`);
+
+  return {
+    title: `${completedLabel} session complete`,
+    options: {
+      body: bodyParts.join(' '),
+      tag: `pomodoro-${sessionRecord.type}-complete`,
+      data: {
+        type: 'pomodoro-ready-session',
+        expectedMode: nextMode,
+        readySessionToken
+      },
+      actions: [{
+        action: 'start-next',
+        title: `Start ${nextLabel.toLowerCase()}`
+      }]
+    }
+  };
+}
+
+function showPageNotification(title, options) {
+  const { actions, ...pageOptions } = options;
+  const notification = new window.Notification(title, pageOptions);
+
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+  };
+}
+
+async function sendCompletionNotification(sessionRecord, nextMode, readySessionToken) {
   if (!notificationsEnabled || getNotificationPermission() !== 'granted') {
     return;
   }
 
-  const isWorkSession = sessionType === 'work';
-  const title = isWorkSession ? 'Work session complete' : 'Break complete';
-  const body = isWorkSession ? 'Your break is ready.' : 'Your next work session is ready.';
+  const { title, options } = buildCompletionNotification(sessionRecord, nextMode, readySessionToken);
 
   try {
-    new window.Notification(title, {
-      body,
-      tag: `pomodoro-${sessionType}-complete`
-    });
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+
+      if (registration && typeof registration.showNotification === 'function') {
+        await registration.showNotification(title, options);
+        return;
+      }
+    }
+
+    showPageNotification(title, options);
   } catch (error) {
     console.warn('Unable to display browser notification.', error);
   }
@@ -647,16 +702,16 @@ function completeSession() {
     elements.focusNote.value = '';
   }
 
-  playCompletionTone();
-  sendCompletionNotification(sessionType);
-
   state.mode = sessionType === 'work' ? 'break' : 'work';
   state.phase = 'idle';
   state.totalSeconds = getModeDuration(state.mode);
   state.remainingSeconds = state.totalSeconds;
   state.lastTimestamp = null;
+  state.readySessionToken = String(sessionRecord.id);
 
   render();
+  playCompletionTone();
+  void sendCompletionNotification(sessionRecord, state.mode, state.readySessionToken);
 }
 
 function tick() {
@@ -690,8 +745,126 @@ function startTimer() {
 
   state.phase = 'running';
   state.lastTimestamp = Date.now();
+  state.readySessionToken = null;
   timerId = setInterval(tick, 1000);
   render();
+}
+
+function persistedStateMatchesReadySession(expectedMode, readySessionToken) {
+  try {
+    const persistedState = JSON.parse(localStorage.getItem(STORAGE_KEYS.state) || 'null');
+    return Boolean(
+      persistedState &&
+      persistedState.phase === 'idle' &&
+      persistedState.mode === expectedMode &&
+      persistedState.readySessionToken === readySessionToken
+    );
+  } catch (error) {
+    console.warn('Unable to validate the ready session.', error);
+    return false;
+  }
+}
+
+function startReadySession(expectedMode, readySessionToken) {
+  if (
+    !['work', 'break'].includes(expectedMode) ||
+    typeof readySessionToken !== 'string' ||
+    !readySessionToken ||
+    state.phase !== 'idle' ||
+    state.mode !== expectedMode ||
+    state.readySessionToken !== readySessionToken ||
+    !persistedStateMatchesReadySession(expectedMode, readySessionToken)
+  ) {
+    return false;
+  }
+
+  startTimer();
+  return true;
+}
+
+function handleReadySessionCommand(command) {
+  if (!command || command.type !== 'start-ready-session') {
+    return false;
+  }
+
+  return startReadySession(command.expectedMode, command.readySessionToken);
+}
+
+function createNotificationActionPrompt() {
+  const prompt = document.createElement('section');
+  prompt.id = 'notification-action-prompt';
+  prompt.className = 'notification-action-prompt';
+  prompt.hidden = true;
+  prompt.setAttribute('role', 'status');
+  prompt.setAttribute('aria-live', 'polite');
+  prompt.innerHTML = `
+    <p id="notification-action-text"></p>
+    <div class="notification-action-buttons">
+      <button id="notification-action-open" class="notification-action-button" type="button">Open timer</button>
+      <button id="notification-action-start" class="notification-action-button notification-action-start" type="button"></button>
+    </div>
+  `;
+  document.body.append(prompt);
+
+  elements.notificationActionPrompt = prompt;
+  elements.notificationActionText = prompt.querySelector('#notification-action-text');
+  elements.notificationActionOpen = prompt.querySelector('#notification-action-open');
+  elements.notificationActionStart = prompt.querySelector('#notification-action-start');
+}
+
+function hideNotificationActionPrompt() {
+  pendingNotificationAction = null;
+  elements.notificationActionPrompt.hidden = true;
+}
+
+function showNotificationActionPrompt(message) {
+  const nextLabel = message.nextLabel === 'break' ? 'break' : 'focus';
+  pendingNotificationAction = {
+    expectedMode: message.expectedMode,
+    readySessionToken: message.readySessionToken
+  };
+  elements.notificationActionText.textContent = message.startRequested
+    ? `Ready to start your ${nextLabel} session?`
+    : `Your ${nextLabel} session is ready.`;
+  elements.notificationActionStart.textContent = `Start ${nextLabel}`;
+  elements.notificationActionPrompt.hidden = false;
+  elements.notificationActionStart.focus();
+}
+
+function handleNotificationMessage(message) {
+  if (!message || typeof message !== 'object') {
+    return;
+  }
+
+  if (message.type === 'notification-ready') {
+    showNotificationActionPrompt(message);
+    return;
+  }
+
+  handleReadySessionCommand(message);
+}
+
+function consumeStartupNotificationCommand() {
+  const url = new URL(window.location.href);
+
+  if (!url.searchParams.has('notificationAction')) {
+    return null;
+  }
+
+  const command = url.searchParams.get('notificationAction') === 'start-next'
+    ? {
+        type: 'start-ready-session',
+        expectedMode: url.searchParams.get('expectedMode'),
+        readySessionToken: url.searchParams.get('readySessionToken')
+      }
+    : null;
+
+  url.searchParams.delete('notificationAction');
+  url.searchParams.delete('expectedMode');
+  url.searchParams.delete('readySessionToken');
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+
+  return command;
 }
 
 function pauseTimer() {
@@ -712,6 +885,7 @@ function resetTimer() {
   state.totalSeconds = getModeDuration('work');
   state.remainingSeconds = state.totalSeconds;
   state.lastTimestamp = null;
+  state.readySessionToken = null;
   render();
 }
 
@@ -798,8 +972,14 @@ function initialize() {
   }
 
   render();
+
+  const startupCommand = consumeStartupNotificationCommand();
+  if (startupCommand) {
+    handleReadySessionCommand(startupCommand);
+  }
 }
 
+createNotificationActionPrompt();
 elements.settingsButton.addEventListener('click', openSettings);
 elements.settingsClose.addEventListener('click', closeSettings);
 elements.settingsCancel.addEventListener('click', closeSettings);
@@ -820,8 +1000,22 @@ elements.settingsForm.addEventListener('submit', handleSettingsSubmit);
 elements.startButton.addEventListener('click', startTimer);
 elements.pauseButton.addEventListener('click', pauseTimer);
 elements.resetButton.addEventListener('click', resetTimer);
+elements.notificationActionOpen.addEventListener('click', hideNotificationActionPrompt);
+elements.notificationActionStart.addEventListener('click', () => {
+  if (pendingNotificationAction) {
+    startReadySession(
+      pendingNotificationAction.expectedMode,
+      pendingNotificationAction.readySessionToken
+    );
+  }
+  hideNotificationActionPrompt();
+});
 
 if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    handleNotificationMessage(event.data);
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch((error) => {
       console.warn('Service worker registration failed.', error);

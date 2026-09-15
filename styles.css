@@ -177,6 +177,69 @@ body[data-phase="paused"] {
   outline-offset: 3px;
 }
 
+.notification-action-prompt {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 18px 42px var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.notification-action-prompt[hidden] {
+  display: none;
+}
+
+.notification-action-prompt p {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.notification-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.notification-action-button {
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-action-button:hover {
+  background: var(--button-hover);
+}
+
+.notification-action-button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.notification-action-start {
+  border-color: transparent;
+  background: var(--ring-progress);
+  color: var(--ring-contrast);
+}
+
+.notification-action-start:hover {
+  background: color-mix(in srgb, var(--ring-progress) 88%, white 12%);
+}
+
 .settings-dialog {
     width: min(92vw, 520px);
     max-height: min(88vh, 720px);
@@ -527,25 +590,6 @@ body[data-phase="paused"] .timer-wrap .mode-badge {
 }
 
 @media (max-width: 360px) {
-  .timer-wrap {
-    width: 100%;
-    height: auto;
-    aspect-ratio: auto;
-    min-height: 96px;
-    padding: 0;
-    background: none;
-    box-shadow: none;
-  }
-
-  .progress-ring {
-    display: none;
-  }
-
-  .timer-digit-wrap {
-    position: static;
-    min-height: 96px;
-  }
-
   .timer-display {
     font-size: clamp(2.6rem, 14vw, 3.4rem);
   }
@@ -880,6 +924,12 @@ body[data-phase="paused"] .timer-wrap .mode-badge {
 }
 
 @media (max-width: 420px) {
+  .notification-action-prompt {
+    top: 12px;
+    right: 12px;
+    width: calc(100vw - 24px);
+  }
+
   .pomodoro-card {
     width: min(92vw, 380px);
   }
@@ -945,11 +995,7 @@ body[data-phase="paused"] .timer-wrap .mode-badge {
   }
 }
 
-@media (max-width: 360px) {
-  .timer-wrap {
-    width: 100%;
-    height: auto;
-    aspect-ratio: auto;
-    min-height: 96px;
-  }
+.progress-ring {
+  display: block;
 }
+
